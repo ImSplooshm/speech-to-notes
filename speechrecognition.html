@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech to Notes</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+        .container {
+            background: #1e1e1e;
+            max-width: 500px;
+            margin: auto;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.3);
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 10px;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: 0.2s;
+        }
+        .start { background: #4caf50; color: white; }
+        .stop { background: #f44336; color: white; }
+        button:hover { opacity: 0.8; }
+        h2 { margin-top: 20px; }
+        #transcript, #notes {
+            padding: 10px;
+            background: #292929;
+            border-radius: 5px;
+            min-height: 50px;
+            text-align: left;
+            white-space: pre-wrap;
+        }
+        select, input {
+            padding: 5px;
+            margin-top: 10px;
+            border-radius: 5px;
+            border: none;
+            background: #292929;
+            color: white;
+        }
+        #sensitivity-slider {
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Speech to Notes</h1>
+
+    <label>Language: 
+        <select id="language">
+            <option value="en-US">English (US)</option>
+            <option value="es-ES">Español (Spain)</option>
+            <option value="fr-FR">Français (France)</option>
+            <option value="de-DE">Deutsch (Germany)</option>
+            <option value="zh-CN">中文 (Mandarin - China)</option>
+            <option value="ja-JP">日本語 (Japanese)</option>
+        </select>
+    </label>
+    <br>
+
+    <label>Sensitivity (Lower = More Sensitive): 
+        <input type="range" id="sensitivity-slider" min="1" max="10" value="5">
+        <span id="sensitivity-value">5</span>
+    </label>
+    <br><br>
+
+    <label>Max Listening Time (seconds): 
+        <input type="number" id="maxTime" min="1" value="30">
+    </label>
+    <br><br>
+
+    <button class="start" onclick="startRecording()">Start</button>
+    <button class="stop" onclick="stopRecording()">Stop</button>
+    <p id="status">Not recording</p>
+
+    <h2>Transcript</h2>
+    <p id="transcript"></p>
+
+    <h2>AI Notes</h2>
+    <p id="notes"></p>
+</div>
+
+<script>
+    let recognition, timeout;
+    let fullTranscript = ""; // Store complete transcript
+
+    // Update sensitivity value
+    document.getElementById('sensitivity-slider').addEventListener('input', function() {
+        document.getElementById('sensitivity-value').textContent = this.value;
+    });
+
+    function startRecording() {
+        const maxTime = parseInt(document.getElementById('maxTime').value) * 1000;
+        const selectedLang = document.getElementById('language').value;
+        const sensitivity = parseInt(document.getElementById('sensitivity-slider').value);
+
+        recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = selectedLang;
+
+        // Simulate sensitivity with maxAlternatives
+        recognition.maxAlternatives = sensitivity;
+
+        recognition.onstart = () => {
+            document.getElementById('status').innerText = 'Listening...';
+            fullTranscript = "";
+            document.getElementById('transcript').innerText = "";
+            document.getElementById('notes').innerText = "";
+        };
+
+        recognition.onresult = event => {
+            let interimTranscript = "";
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                let transcript = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    fullTranscript += transcript + ". ";
+                } else {
+                    interimTranscript += transcript + " ";
+                }
+            }
+
+            document.getElementById('transcript').innerText = fullTranscript + interimTranscript;
+            generateConciseNotes(fullTranscript + interimTranscript);
+        };
+
+        recognition.onerror = event => {
+            console.error("Speech recognition error:", event.error);
+            document.getElementById('status').innerText = 'Error: ' + event.error;
+        };
+
+        recognition.onend = () => {
+            document.getElementById('status').innerText = 'Stopped';
+        };
+
+        recognition.start();
+        timeout = setTimeout(stopRecording, maxTime);
+    }
+
+    function stopRecording() {
+        if (recognition) {
+            recognition.stop();
+            clearTimeout(timeout);
+            document.getElementById('status').innerText = 'Processing final notes...';
+            generateConciseNotes(fullTranscript);
+        }
+    }
+
+    function generateConciseNotes(text) {
+        // Split text into sentences and remove redundant words
+        let sentences = text.split('. ').map(sentence => sentence.trim());
+
+        // Remove common filler words and unnecessary phrases
+        const fillerWords = ["and", "the", "to", "a", "of", "in", "for", "on", "with", "that"];
+        sentences = sentences.filter(sentence => {
+            return !fillerWords.some(word => sentence.toLowerCase().includes(word));
+        });
+
+        // Make the summary more concise by reducing it to key sentences
+        let conciseSummary = sentences.join('. ').trim();
+        if (!conciseSummary) {
+            conciseSummary = "No speech detected.";
+        }
+
+        document.getElementById('notes').innerText = conciseSummary;
+        document.getElementById('status').innerText = 'Done';
+    }
+</script>
+
+</body>
+</html>
