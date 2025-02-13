@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Speech to Notes</title>
+    <title>YouTube Audio to Notes</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -41,21 +41,29 @@
             text-align: left;
             white-space: pre-wrap;
         }
+        input[type="file"] {
+            padding: 5px;
+            margin-top: 10px;
+            border-radius: 5px;
+            border: none;
+            background: #292929;
+            color: white;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>Speech to Notes</h1>
+    <h1>Convert YouTube Audio to Notes</h1>
 
-    <label>Max Listening Time (seconds): 
-        <input type="number" id="maxTime" min="1" value="30">
+    <label>Upload Audio (MP3/WAV): 
+        <input type="file" id="audioFile" accept="audio/*">
     </label>
     <br><br>
 
-    <button class="start" onclick="startRecording()">Start</button>
-    <button class="stop" onclick="stopRecording()">Stop</button>
-    <p id="status">Not recording</p>
+    <button class="start" onclick="startTranscription()">Start Transcription</button>
+    <button class="stop" onclick="stopTranscription()">Stop</button>
+    <p id="status">Not processing</p>
 
     <h2>Transcript</h2>
     <p id="transcript"></p>
@@ -65,76 +73,75 @@
 </div>
 
 <script>
-    let recognition, timeout;
-    let fullTranscript = ""; // Store complete transcript
+    let recognition;
+    let audioFile;
 
-    const stopWords = ["a", "an", "the", "and", "is", "it", "in", "to", "of", "that", "with", "for", "on", "at", "by", "this", "be", "was", "were", "are", "as", "from", "or", "but", "not", "which", "when", "has", "have", "had"]; // List of common words to remove
-
-    function startRecording() {
-        const maxTime = parseInt(document.getElementById('maxTime').value) * 1000;
-
+    // Initialize SpeechRecognition API
+    function initSpeechRecognition() {
         recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
         recognition.continuous = true;
         recognition.interimResults = true;
-        recognition.lang = 'en-US';
-
         recognition.onstart = () => {
             document.getElementById('status').innerText = 'Listening...';
-            fullTranscript = "";
             document.getElementById('transcript').innerText = "";
             document.getElementById('notes').innerText = "";
         };
-
         recognition.onresult = event => {
             let interimTranscript = "";
             for (let i = event.resultIndex; i < event.results.length; i++) {
                 let transcript = event.results[i][0].transcript;
                 if (event.results[i].isFinal) {
-                    fullTranscript += transcript + ". ";
+                    document.getElementById('transcript').innerText += transcript + ". ";
                 } else {
                     interimTranscript += transcript + " ";
                 }
             }
-
-            document.getElementById('transcript').innerText = fullTranscript + interimTranscript;
-            generateNotes(fullTranscript + interimTranscript);
+            document.getElementById('transcript').innerText += interimTranscript;
+            generateNotes(document.getElementById('transcript').innerText);
         };
-
         recognition.onerror = event => {
             console.error("Speech recognition error:", event.error);
             document.getElementById('status').innerText = 'Error: ' + event.error;
         };
-
         recognition.onend = () => {
             document.getElementById('status').innerText = 'Stopped';
         };
-
-        recognition.start();
-        timeout = setTimeout(stopRecording, maxTime);
     }
 
-    function stopRecording() {
+    // Start transcription
+    function startTranscription() {
+        const fileInput = document.getElementById('audioFile');
+        const file = fileInput.files[0];
+
+        if (!file) {
+            alert("Please upload an audio file.");
+            return;
+        }
+
+        audioFile = file;
+        initSpeechRecognition();
+        document.getElementById('status').innerText = 'Processing audio...';
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            // Start the speech recognition
+            recognition.start();
+        };
+        reader.readAsDataURL(audioFile);
+    }
+
+    // Stop transcription
+    function stopTranscription() {
         if (recognition) {
             recognition.stop();
-            clearTimeout(timeout);
-            document.getElementById('status').innerText = 'Processing final notes...';
-            generateNotes(fullTranscript);
         }
+        document.getElementById('status').innerText = 'Processing final notes...';
     }
 
-    // Simplify and generate notes
+    // Generate concise notes
     function generateNotes(text) {
-        let sentences = text.split('. ').map(sentence => sentence.trim());
-        
-        // Remove stop words and keep essential words
-        let filteredSentences = sentences.map(sentence => {
-            return sentence.split(' ').filter(word => !stopWords.includes(word.toLowerCase())).join(' ');
-        });
-
-        // Get the most relevant sentences (concise summary)
-        let summary = filteredSentences.filter(sentence => sentence.length > 5) // Filter out very short sentences
-                                       .slice(0, 5) // Only keep the first 5 relevant sentences
-                                       .join('. ');
+        let sentences = text.split('. ').map(sentence => "- " + sentence.trim());
+        let summary = sentences.join('\n');
 
         if (!summary.trim()) {
             summary = "No speech detected.";
